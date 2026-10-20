@@ -5,7 +5,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
 
 WORKDIR /app
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Image légère : pas de Whisper local (transcription via GROQ_API_KEY)
+RUN grep -vi faster-whisper requirements.txt > req-cloud.txt \
+    && pip install --no-cache-dir -r req-cloud.txt
 
 COPY dub_fr.py server.py ./
 

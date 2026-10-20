@@ -50,11 +50,52 @@ def download(url: str, workdir: Path) -> Path:
 
 
 # ---------------------------------------------------------------- 2. Transcription
+LANG_CODES = {
+    "english": "en", "french": "fr", "spanish": "es", "german": "de", "italian": "it",
+    "portuguese": "pt", "arabic": "ar", "russian": "ru", "chinese": "zh-CN",
+    "japanese": "ja", "korean": "ko", "dutch": "nl", "turkish": "tr", "hindi": "hi",
+}
+
+
+def transcribe_groq(wav: Path, workdir: Path):
+    """Transcription via l'API Groq (Whisper hébergé) : aucune charge mémoire locale."""
+    import httpx
+    mp3 = workdir / "asr.mp3"
+    run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(wav),
+         "-ac", "1", "-ar", "16000", "-b:a", "32k", str(mp3)])
+    if mp3.stat().st_size > 24 * 1024 * 1024:
+        raise SystemExit("Vidéo trop longue pour l'API de transcription (limite ~25 Mo d'audio).")
+    model = os.environ.get("GROQ_MODEL", "whisper-large-v3-turbo")
+    print(f"[2/5] Transcription (Groq {model})...")
+    with open(mp3, "rb") as f:
+        r = httpx.post(
+            "https://api.groq.com/openai/v1/audio/transcriptions",
+            headers={"Authorization": f"Bearer {os.environ['GROQ_API_KEY']}"},
+            files={"file": ("asr.mp3", f, "audio/mpeg")},
+            data={"model": model, "response_format": "verbose_json",
+                  "timestamp_granularities[]": "segment"},
+            timeout=300,
+        )
+    if r.status_code != 200:
+        raise SystemExit(f"Transcription Groq échouée ({r.status_code}) : {r.text[:200]}")
+    j = r.json()
+    segments = [
+        {"start": float(x["start"]), "end": float(x["end"]), "text": x["text"].strip()}
+        for x in j.get("segments", []) if x.get("text", "").strip()
+    ]
+    raw = str(j.get("language", "")).lower()
+    lang = LANG_CODES.get(raw, raw if len(raw) == 2 else "auto")
+    print(f"      Langue détectée : {lang} | {len(segments)} segments")
+    return segments, lang
+
+
 def transcribe(video: Path, workdir: Path, model_size: str):
-    print(f"[2/5] Transcription (Whisper '{model_size}')...")
     wav = workdir / "original.wav"
     run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(video),
          "-vn", "-ac", "1", "-ar", "16000", str(wav)])
+    if os.environ.get("GROQ_API_KEY"):
+        return transcribe_groq(wav, workdir)
+    print(f"[2/5] Transcription (Whisper '{model_size}')...")
     from faster_whisper import WhisperModel
     model = WhisperModel(model_size, compute_type="int8")
     segs, info = model.transcribe(str(wav), vad_filter=True)
