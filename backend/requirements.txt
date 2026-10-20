@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+yt-dlp
+faster-whisper
+edge-tts
+pydub
+anthropic
+deep-translator
