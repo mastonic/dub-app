@@ -85,6 +85,7 @@ def worker(jid: str, body: JobIn):
                                     text=True, cwd=Path(__file__).parent)
             tail = []
             for line in proc.stdout:
+                print(f"[{jid}] {line}", end="", flush=True)
                 tail = (tail + [line.rstrip()])[-15:]
                 m = STEP_RE.search(line)
                 if m:
@@ -95,7 +96,13 @@ def worker(jid: str, body: JobIn):
                 shutil.rmtree(workdir / "work", ignore_errors=True)
             else:
                 job["status"] = "error"
-                job["error"] = "\n".join(tail[-5:]) or "Erreur inconnue"
+                rc = proc.returncode
+                hint = ""
+                if rc in (-9, 137):
+                    hint = (" Arrêt par manque de mémoire probable : "
+                            "utilise WHISPER_MODEL=tiny ou augmente la RAM.")
+                job["error"] = (f"Le traitement s'est arrêté (code {rc}).{hint}\n"
+                                + "\n".join(tail[-5:]))
         except Exception as e:  # noqa: BLE001
             job["status"] = "error"
             job["error"] = str(e)
