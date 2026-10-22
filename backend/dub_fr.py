@@ -38,30 +38,54 @@ def duration(path: Path) -> float:
 
 
 # ---------------------------------------------------------------- 1. Téléchargement
-def download(url: str, workdir: Path) -> Path:
-    print("[1/5] Téléchargement de la vidéo...")
-    target = workdir / "source.mp4"
-    cmd = [
-        "yt-dlp", "-f", "bv*[height<=720]+ba/b[height<=720]/bv*+ba/b", "--merge-output-format", "mp4",
-        "--no-playlist", "-o", str(workdir / "source.%(ext)s"),
-    ]
+def _ytdlp_flags(workdir: Path):
+    flags = ["--no-playlist"]
     # YouTube exige un runtime JavaScript (node) pour résoudre ses signatures.
     if shutil.which("node"):
-        cmd += ["--js-runtimes", "node"]
+        flags += ["--js-runtimes", "node"]
     # Cookies optionnels (contenu d'un cookies.txt au format Netscape) contre le blocage anti-bot.
     cookies = os.environ.get("YT_COOKIES", "").strip()
     if cookies:
         cfile = workdir / "cookies.txt"
         cfile.write_text(cookies + "\n", encoding="utf-8")
-        cmd += ["--cookies", str(cfile)]
+        flags += ["--cookies", str(cfile)]
+    return flags
+
+
+DL_ERROR = (
+    "Téléchargement impossible. Si c'est un lien YouTube : YouTube bloque souvent "
+    "les serveurs (vérifie la ligne ERROR plus haut dans les logs). "
+    "Essaie un lien X, ou configure YT_COOKIES."
+)
+
+
+def download(url: str, workdir: Path) -> Path:
+    print("[1/5] Téléchargement de la vidéo...")
+    target = workdir / "source.mp4"
+    cmd = [
+        "yt-dlp", "-f", "bv*[height<=720]+ba/b[height<=720]/bv*+ba/b", "--merge-output-format", "mp4",
+        "-o", str(workdir / "source.%(ext)s"),
+    ] + _ytdlp_flags(workdir)
     proc = subprocess.run(cmd + [url])
     if proc.returncode != 0 or not target.exists():
-        raise SystemExit(
-            "Téléchargement impossible. Si c'est un lien YouTube : YouTube bloque souvent "
-            "les serveurs (vérifie la ligne ERROR plus haut dans les logs). "
-            "Essaie un lien X, ou configure YT_COOKIES."
-        )
+        raise SystemExit(DL_ERROR)
     return target
+
+
+def download_audio(url: str, workdir: Path) -> Path:
+    """Télécharge uniquement l'audio (beaucoup plus rapide) et le convertit en wav 16 kHz mono."""
+    raw = workdir / "audio_raw"
+    for old in workdir.glob("audio_raw.*"):
+        old.unlink()
+    cmd = ["yt-dlp", "-f", "ba/b", "-o", str(raw) + ".%(ext)s"] + _ytdlp_flags(workdir)
+    proc = subprocess.run(cmd + [url])
+    found = sorted(workdir.glob("audio_raw.*"))
+    if proc.returncode != 0 or not found:
+        raise SystemExit(DL_ERROR)
+    wav = workdir / "original.wav"
+    run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(found[0]),
+         "-vn", "-ac", "1", "-ar", "16000", str(wav)])
+    return wav
 
 
 # ---------------------------------------------------------------- 2. Transcription
