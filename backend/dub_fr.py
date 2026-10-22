@@ -187,7 +187,23 @@ async def tts_all(items, voice, rate, workdir: Path):
     paths = []
     for idx, text in enumerate(items):
         p = workdir / f"tts_{idx:04d}.mp3"
-        await edge_tts.Communicate(text, voice, rate=rate).save(str(p))
+        clean = re.sub(r"\s+", " ", text or "").strip()
+        ok = False
+        # Les segments sans mot (♪, ..., [musique]) ne produisent aucun son : on les saute.
+        if re.search(r"\w", clean):
+            for attempt in range(3):
+                try:
+                    await edge_tts.Communicate(clean, voice, rate=rate).save(str(p))
+                    if p.exists() and p.stat().st_size > 0:
+                        ok = True
+                        break
+                except Exception:
+                    await asyncio.sleep(1.5 * (attempt + 1))
+        if not ok:
+            print(f"      Segment {idx + 1} sans voix (ignoré) : {clean[:40]!r}")
+            run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi",
+                 "-i", "anullsrc=r=24000:cl=mono", "-t", "0.1",
+                 "-c:a", "libmp3lame", str(p)])
         paths.append(p)
     return paths
 
