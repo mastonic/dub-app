@@ -157,9 +157,24 @@ def translate_claude(texts, model="claude-sonnet-5-5"):
 
 
 def translate_google(texts, src):
+    import time
     from deep_translator import GoogleTranslator
     tr = GoogleTranslator(source=src or "auto", target="fr")
-    return [tr.translate(t) for t in texts]
+    out = []
+    for t in texts:
+        for attempt in range(6):
+            try:
+                out.append(tr.translate(t) or t)
+                break
+            except Exception:  # TooManyRequests, réseau...
+                time.sleep(2 * (attempt + 1))
+        else:
+            raise SystemExit(
+                "Traduction Google bloquée (trop de requêtes). "
+                "Définis ANTHROPIC_API_KEY pour utiliser Claude à la place."
+            )
+        time.sleep(0.3)
+    return out
 
 
 # ---------------------------------------------------------------- 4. Voix française
