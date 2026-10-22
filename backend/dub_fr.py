@@ -42,7 +42,7 @@ def download(url: str, workdir: Path) -> Path:
     print("[1/5] Téléchargement de la vidéo...")
     target = workdir / "source.mp4"
     cmd = [
-        "yt-dlp", "-f", "bv*+ba/b", "--merge-output-format", "mp4",
+        "yt-dlp", "-f", "bv*[height<=720]+ba/b[height<=720]/bv*+ba/b", "--merge-output-format", "mp4",
         "--no-playlist", "-o", str(workdir / "source.%(ext)s"),
     ]
     # YouTube exige un runtime JavaScript (node) pour résoudre ses signatures.
