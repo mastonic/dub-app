@@ -18,6 +18,7 @@ import asyncio
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -40,12 +41,26 @@ def duration(path: Path) -> float:
 def download(url: str, workdir: Path) -> Path:
     print("[1/5] Téléchargement de la vidéo...")
     target = workdir / "source.mp4"
-    run([
+    cmd = [
         "yt-dlp", "-f", "bv*+ba/b", "--merge-output-format", "mp4",
-        "--no-playlist", "-o", str(workdir / "source.%(ext)s"), url,
-    ])
-    if not target.exists():
-        raise SystemExit("Téléchargement échoué : source.mp4 introuvable.")
+        "--no-playlist", "-o", str(workdir / "source.%(ext)s"),
+    ]
+    # YouTube exige un runtime JavaScript (node) pour résoudre ses signatures.
+    if shutil.which("node"):
+        cmd += ["--js-runtimes", "node"]
+    # Cookies optionnels (contenu d'un cookies.txt au format Netscape) contre le blocage anti-bot.
+    cookies = os.environ.get("YT_COOKIES", "").strip()
+    if cookies:
+        cfile = workdir / "cookies.txt"
+        cfile.write_text(cookies + "\n", encoding="utf-8")
+        cmd += ["--cookies", str(cfile)]
+    proc = subprocess.run(cmd + [url])
+    if proc.returncode != 0 or not target.exists():
+        raise SystemExit(
+            "Téléchargement impossible. Si c'est un lien YouTube : YouTube bloque souvent "
+            "les serveurs (vérifie la ligne ERROR plus haut dans les logs). "
+            "Essaie un lien X, ou configure YT_COOKIES."
+        )
     return target
 
 

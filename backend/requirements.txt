@@ -1,6 +1,6 @@
 fastapi
 uvicorn[standard]
-yt-dlp
+yt-dlp[default]
 faster-whisper
 edge-tts
 pydub
