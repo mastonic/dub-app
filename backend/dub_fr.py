@@ -125,7 +125,11 @@ def transcribe(video: Path, workdir: Path, model_size: str):
 # ---------------------------------------------------------------- 3. Traduction
 def translate_claude(texts, model="claude-sonnet-5-5"):
     import anthropic
-    client = anthropic.Anthropic()
+    # Clé non rattachée à un workspace : ajouter ANTHROPIC_WORKSPACE_ID.
+    ws = os.environ.get("ANTHROPIC_WORKSPACE_ID", "").strip()
+    client = anthropic.Anthropic(
+        default_headers={"anthropic-workspace-id": ws} if ws else None
+    )
     out = []
     for i in range(0, len(texts), 40):
         chunk = texts[i:i + 40]
